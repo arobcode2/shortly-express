@@ -23,30 +23,57 @@ app.use(bodyParser.urlencoded({ extended: true }));
 app.use(express.static(__dirname + '/public'));
 
 
-app.get('/', 
-function(req, res) {
+app.get('/', function(req, res) {
   res.render('index');
 });
 
-app.get('/create', 
-function(req, res) {
+app.get('/create', function(req, res) {
   res.render('index');
 });
 
-app.get('/login', 
-function(req, res) {
+app.get('/login', function(req, res) {
   res.render('login');
 });
 
-app.get('/links', 
-function(req, res) {
+app.get('/signup', function(req, res) {
+  res.render('signup');
+});
+
+app.get('/links', function(req, res) {
   Links.reset().fetch().then(function(links) {
     res.status(200).send(links.models);
   });
 });
 
-app.post('/links', 
-function(req, res) {
+app.get('/users', function(req, res) {
+  Users.reset().fetch().then(function(users) {
+    res.status(200).send(users.models);
+  });
+});
+
+app.post('/signup', function(req, res) {
+  console.log(req.body);
+  new User({username: req.body.username, password: req.body.password}).fetch().then(function(found) {
+    if (found) {
+      console.log('User already exists');
+      //later we will change this to force them to sign in
+    } else {
+      console.log('Making the user');
+      Users.create({
+        username: req.body.username,
+        password: req.body.password
+      })
+      .then(function(newUser) {
+        res.status(200).send(newUser);
+      });
+      //hash the password
+      //put that shit in the database
+      //sign them in
+    }
+  });
+});
+
+app.post('/links', function(req, res) {
   var uri = req.body.url;
 
   if (!util.isValidUrl(uri)) {
@@ -80,6 +107,20 @@ function(req, res) {
 /************************************************************/
 // Write your authentication routes here
 /************************************************************/
+
+// app.use('/login', function(req, res) {
+//   res.send('displaying login page');
+// });
+
+// app.use(function(req, res, next) {
+//   // if (!req.user) {
+//   //   res.redirect('/login');
+//   // } else {
+//   //   next();
+//   // }
+//   console.log('req: ', res.req.path);
+// });
+
 
 
 
