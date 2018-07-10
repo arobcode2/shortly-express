@@ -24,47 +24,51 @@ app.use(bodyParser.urlencoded({ extended: true }));
 app.use(express.static(__dirname + '/public'));
 app.use(session({
   secret: 'cookie monster',
-  resave: true,
-  saveUninitialized: false,
-  cookie: { secure: true }
+  resave: false,
+  saveUninitialized: true
 }));
 
 
-app.get('/', util.checkUser, function(req, res) {
+app.get('/', util.checkUser, function (req, res) {
   res.render('index');
 });
 
-app.get('/create', util.checkUser, function(req, res) {
+app.get('/create', util.checkUser, function (req, res) {
   res.render('index');
 });
 
-app.get('/login', function(req, res) {
+app.get('/login', function (req, res) {
   res.render('login');
 });
 
-app.get('/logout', function(req, res) {
-  delete req.sessionID;
-  res.redirect('/login');
-})
+app.get('/logout', function (req, res) {
+  req.session.destroy(function (err) {
+    if (err) {
+      console.error(err);
+    } else {
+      res.redirect('/login');
+    }
+  });
+});
 
-app.get('/signup', function(req, res) {
+app.get('/signup', function (req, res) {
   res.render('signup');
 });
 
-app.get('/links', function(req, res) {
-  Links.reset().fetch().then(function(links) {
+app.get('/links', util.checkUser, function (req, res) {
+  Links.reset().fetch().then(function (links) {
     res.status(200).send(links.models);
   });
 });
 
-app.get('/users', function(req, res) {
-  Users.reset().fetch().then(function(users) {
+app.get('/users', function (req, res) {
+  Users.reset().fetch().then(function (users) {
     res.status(200).send(users.models);
   });
 });
 
 
-app.post('/links', function(req, res) {
+app.post('/links', function (req, res) {
   var uri = req.body.url;
 
   if (!util.isValidUrl(uri)) {
@@ -72,24 +76,24 @@ app.post('/links', function(req, res) {
     return res.sendStatus(404);
   }
 
-  new Link({ url: uri }).fetch().then(function(found) {
+  new Link({ url: uri }).fetch().then(function (found) {
     if (found) {
       res.status(200).send(found.attributes);
     } else {
-      util.getUrlTitle(uri, function(err, title) {
+      util.getUrlTitle(uri, function (err, title) {
         if (err) {
           console.log('Error reading URL heading: ', err);
           return res.sendStatus(404);
         }
-        
+
         Links.create({
           url: uri,
           title: title,
           baseUrl: req.headers.origin
         })
-        .then(function(newLink) {
-          res.status(200).send(newLink);
-        });
+          .then(function (newLink) {
+            res.status(200).send(newLink);
+          });
       });
     }
   });
@@ -99,41 +103,32 @@ app.post('/links', function(req, res) {
 // Write your authentication routes here
 /************************************************************/
 
-app.post('/signup', function(req, res) {
-  console.log(req.body);
-  new User({username: req.body.username}).fetch().then(function(found) {
+app.post('/signup', function (req, res) {
+  new User({ username: req.body.username }).fetch().then(function (found) {
     if (found) {
-      res.status(500).send('Username exists in database already. Please use another one. Click back to go back to the signup form.');
+      res.redirect('/login');
     } else {
-      console.log('Making the user');
-      bcrypt.hash(req.body.password, null, null, function(err, hash) {
-        Users.create({
-          username: req.body.username,
-          password: hash
-        }).then(function(newUser) {
-          console.log('Added ' + req.body.username + ' to the database');
-          res.redirect('/');
-        });
+      new User({ username: req.body.username, password: req.body.password }).save().then(function () {
+        req.session.loggedIn = true;
+        res.redirect('/');
       });
     }
   });
 });
 
-app.post('/login', function(req, res) {
-  User.where({username: req.body.username}).fetch().then(function(found) {
+app.post('/login', function (req, res) {
+  User.where({ username: req.body.username }).fetch().then(function (found) {
     if (found) {
-      console.log(`Username ${req.body.username} was found in database`);
-      bcrypt.compare(req.body.password, found.get('password'), function(err, result) {
-        if (result) {
+      found.comparePassword(req.body.password, function (err, match) {
+        if (match) {
+          req.session.loggedIn = true;
           res.redirect('/');
         } else {
-          console.log('Password did not match...redirecting to signup');
-          res.redirect('/signup');
+          res.redirect('/login');
         }
-      })
+      });
     } else {
-      console.log('Username did not match...redirecting to signup');
-      res.redirect('/signup');
+      res.redirect('/login');
     }
   });
 });
@@ -144,8 +139,8 @@ app.post('/login', function(req, res) {
 // If the short-code doesn't exist, send the user to '/'
 /************************************************************/
 
-app.get('/*', function(req, res) {
-  new Link({ code: req.params[0] }).fetch().then(function(link) {
+app.get('/*', function (req, res) {
+  new Link({ code: req.params[0] }).fetch().then(function (link) {
     if (!link) {
       res.redirect('/');
     } else {
@@ -153,9 +148,9 @@ app.get('/*', function(req, res) {
         linkId: link.get('id')
       });
 
-      click.save().then(function() {
+      click.save().then(function () {
         link.set('visits', link.get('visits') + 1);
-        link.save().then(function() {
+        link.save().then(function () {
           return res.redirect(link.get('url'));
         });
       });
