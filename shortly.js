@@ -2,6 +2,7 @@ var express = require('express');
 var util = require('./lib/utility');
 var partials = require('express-partials');
 var bodyParser = require('body-parser');
+var bcrypt = require('bcrypt-nodejs');
 
 
 var db = require('./app/config');
@@ -53,22 +54,39 @@ app.get('/users', function(req, res) {
 
 app.post('/signup', function(req, res) {
   console.log(req.body);
-  new User({username: req.body.username, password: req.body.password}).fetch().then(function(found) {
+  new User({username: req.body.username}).fetch().then(function(found) {
     if (found) {
-      console.log('User already exists');
-      //later we will change this to force them to sign in
+      res.status(500).send('Username exists in database already. Please use another one. Click back to go back to the signup form.');
     } else {
       console.log('Making the user');
-      Users.create({
-        username: req.body.username,
-        password: req.body.password
-      })
-      .then(function(newUser) {
-        res.status(200).send(newUser);
+      bcrypt.hash(req.body.password, null, null, function(err, hash) {
+        Users.create({
+          username: req.body.username,
+          password: hash
+        }).then(function(newUser) {
+          console.log('Added ' + req.body.username + ' to the database');
+          res.redirect('/');
+        });
       });
-      //hash the password
-      //put that shit in the database
-      //sign them in
+    }
+  });
+});
+
+app.post('/login', function(req, res) {
+  User.where({username: req.body.username}).fetch().then(function(found) {
+    if (found) {
+      console.log(`Username ${req.body.username} was found in database`);
+      bcrypt.compare(req.body.password, found.get('password'), function(err, result) {
+        if (result) {
+          res.redirect('/');
+        } else {
+          console.log('Password did not match...redirecting to signup');
+          res.redirect('/signup');
+        }
+      })
+    } else {
+      console.log('Username did not match...redirecting to signup');
+      res.redirect('/signup');
     }
   });
 });
